@@ -4994,86 +4994,121 @@ elif selected_page == "Identify Breed":
         else: st.info(translate_text("Upload a clear image file (JPG, PNG) containing cattle to begin identification.",current_lang))
 
 
-# 6. Chatbot (from original code - minor error handling improvements)
+# 6. Chatbot (Refactored for translate_text usage)
 elif selected_page == "Chatbot":
     st.title("🧑‍🌾 Kamadhenu AI Assistant")
-    # ... (your existing Chatbot content with robust response handling) ...
     st.markdown("Ask questions about indigenous breeds, farming practices, health, schemes, etc.")
     st.markdown("---")
+
     if not gemini_model:
         st.error("Chatbot unavailable: Google API Key/Model issue.", icon="🚫")
     else:
         try:
-            translator = Translator()
-            if "messages" not in st.session_state: st.session_state.messages = []
-            if "chat_language" not in st.session_state: st.session_state.chat_language = "en"
+            from translation_utils import translate_text
 
-            language_options = {"English": "en", "हिन्दी (Hindi)": "hi", "తెలుగు (Telugu)": "te", "தமிழ் (Tamil)": "ta", "ગુજરાતી (Gujarati)": "gu", "ਪੰਜਾਬੀ (Punjabi)": "pa"}
-            lang_keys = list(language_options.keys()); lang_values = list(language_options.values())
-            current_lang_index = lang_values.index(st.session_state.chat_language) if st.session_state.chat_language in lang_values else 0
-            selected_language_name = st.selectbox("Choose interaction language:", lang_keys, index=current_lang_index, key="chat_lang_select")
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
+            if "chat_language" not in st.session_state:
+                st.session_state.chat_language = "en"
+
+            language_options = {
+                "English": "en", "हिन्दी (Hindi)": "hi", "తెలుగు (Telugu)": "te",
+                "தமிழ் (Tamil)": "ta", "ગુજરાતી (Gujarati)": "gu", "ਪੰਜਾਬੀ (Punjabi)": "pa"
+            }
+            lang_keys = list(language_options.keys())
+            lang_values = list(language_options.values())
+
+            current_lang_index = lang_values.index(st.session_state.chat_language) \
+                if st.session_state.chat_language in lang_values else 0
+
+            selected_language_name = st.selectbox(
+                "Choose interaction language:", lang_keys,
+                index=current_lang_index,
+                key="chat_lang_select"
+            )
+
             st.session_state.chat_language = language_options[selected_language_name]
             lang_code = st.session_state.chat_language
 
+            # Display chat history
             for message in st.session_state.messages:
-                with st.chat_message(message["role"]): st.markdown(message["content"])
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
+            # Chat input
             if prompt := st.chat_input(f"Ask your question in {selected_language_name}..."):
                 st.session_state.messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user"): st.markdown(prompt)
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+
                 with st.chat_message("assistant"):
                     message_placeholder = st.empty()
                     with st.spinner(f"Thinking in {selected_language_name}..."):
                         try:
-                            prompt_en = prompt
-                            if lang_code != 'en':
-                                try: prompt_en = translator.translate(prompt, src=lang_code, dest='en').text
-                                except Exception as trans_in_err: st.warning(f"Translation error: {trans_in_err}", icon="⚠️"); # Fallback
+                            # Translate user input to English
+                            prompt_en = translate_text(prompt, 'en') if lang_code != 'en' else prompt
+
+                            # Context
                             contextual_prompt = f"""
                             You are 'Kamadhenu Sahayak', an AI assistant for Indian farmers and cattle rearers. Focus specifically on:
                             1. Indigenous Indian cattle breeds (like Gir, Sahiwal, Ongole, Tharparkar, Kankrej, Rathi, Hallikar, etc.): Their care, characteristics, milk yield, draft power, climate suitability, and conservation status.
                             2. Sustainable & Eco-Friendly Farming Practices relevant to India, especially those involving cattle: Manure management (composting, biogas), rotational grazing, water conservation for livestock, agroforestry/silvopasture for fodder and shade, organic farming principles for fodder crops.
-                            3. Common Cattle Diseases in India: Recognizing symptoms, basic first aid/preventive measures (e.g., vaccination schedules, deworming), but **always strongly emphasize consulting a qualified veterinarian** for actual diagnosis and treatment. Do not provide specific drug dosages. Mention diseases like FMD, HS, BQ, Mastitis, Scours, Bloat.
+                            3. Common Cattle Diseases in India: Recognizing symptoms, basic first aid/preventive measures (e.g., vaccination schedules, deworming), but *always strongly emphasize consulting a qualified veterinarian* for actual diagnosis and treatment. Do not provide specific drug dosages. Mention diseases like FMD, HS, BQ, Mastitis, Scours, Bloat.
                             4. Indian Government Schemes for Agriculture & Animal Husbandry.
                             5. General cattle lifecycle management.
                             6. Basic factors affecting cattle price/valuation.
                             Answer the user question concisely, helpfully, in a friendly tone. If unrelated, politely state your specialization.
                             User question (potentially translated): {prompt_en}
-                            Respond *only* in {selected_language_name}. Use bullet points if appropriate.
+                            Respond only in {selected_language_name}. Use bullet points if appropriate.
                             """
+
                             response = gemini_model.generate_content(contextual_prompt)
+
+                            # Extract response
                             response_text_en = ""
                             try:
-                                if hasattr(response, 'candidates') and response.candidates and hasattr(response.candidates[0], 'content') and hasattr(response.candidates[0].content, 'parts') and response.candidates[0].content.parts:
+                                if hasattr(response, 'candidates') and response.candidates and \
+                                   hasattr(response.candidates[0], 'content') and \
+                                   hasattr(response.candidates[0].content, 'parts') and \
+                                   response.candidates[0].content.parts:
                                     response_text_en = response.candidates[0].content.parts[0].text
                                 else:
                                     block_reason_msg = "Unknown reason."
-                                    if hasattr(response, 'prompt_feedback') and hasattr(response.prompt_feedback, 'block_reason'): block_reason_msg = f"Block Reason: {response.prompt_feedback.block_reason}."
-                                    elif hasattr(response, 'candidates') and response.candidates and hasattr(response.candidates[0], 'finish_reason'): block_reason_msg = f"Finish Reason: {response.candidates[0].finish_reason}."
-                                    st.warning(f"AI response may be empty/blocked. {block_reason_msg}", icon="⚠️"); response_text_en = "I apologize, but I couldn't generate a complete response. Try rephrasing?"
-                            except ValueError as ve: st.error(f"Error processing AI response (blocked content?): {ve}"); response_text_en = "Issue processing response (content filters?). Try rephrasing."
-                            except Exception as e_resp: st.error(f"Unexpected error processing AI response: {e_resp}"); response_text_en = "Internal error processing response."
+                                    if hasattr(response, 'prompt_feedback') and hasattr(response.prompt_feedback, 'block_reason'):
+                                        block_reason_msg = f"Block Reason: {response.prompt_feedback.block_reason}."
+                                    elif hasattr(response, 'candidates') and response.candidates and \
+                                         hasattr(response.candidates[0], 'finish_reason'):
+                                        block_reason_msg = f"Finish Reason: {response.candidates[0].finish_reason}."
+                                    st.warning(f"AI response may be empty/blocked. {block_reason_msg}", icon="⚠")
+                                    response_text_en = "I apologize, but I couldn't generate a complete response. Try rephrasing?"
+                            except Exception as e_resp:
+                                st.error(f"Error processing AI response: {e_resp}")
+                                response_text_en = "Internal error processing response."
 
-                            final_response_text = response_text_en
-                            if lang_code != 'en' and response_text_en and "I apologize" not in response_text_en and "I encountered an issue" not in response_text_en:
-                                 try: final_response_text = translator.translate(response_text_en, src='en', dest=lang_code).text
-                                 except Exception as trans_err: st.error(f"Translation error: {trans_err}"); final_response_text = f"(Translation Error) {response_text_en}"
-                            elif lang_code != 'en' and ("I apologize" in response_text_en or "I encountered an issue" in response_text_en): # Try translating error messages
-                                try: final_response_text = translator.translate(response_text_en, src='en', dest=lang_code).text
-                                except: pass # Keep English error if translation of error fails
+                            # Translate back to user's language
+                            if lang_code != 'en' and response_text_en:
+                                try:
+                                    final_response_text = translate_text(response_text_en, lang_code)
+                                except Exception:
+                                    final_response_text = f"(Translation Error) {response_text_en}"
+                            else:
+                                final_response_text = response_text_en
 
                             message_placeholder.markdown(final_response_text)
                             st.session_state.messages.append({"role": "assistant", "content": final_response_text})
+
                         except Exception as e:
                             st.error(f"Error generating response: {e}")
                             error_msg = f"Sorry, error processing request in {selected_language_name}."
                             try:
-                                if lang_code != 'en': error_msg = translator.translate(error_msg, src='en', dest=lang_code).text
-                            except: pass
+                                if lang_code != 'en':
+                                    error_msg = translate_text(error_msg, lang_code)
+                            except:
+                                pass
                             message_placeholder.markdown(error_msg)
                             st.session_state.messages.append({"role": "assistant", "content": error_msg})
-        except Exception as e: st.error(f"Chatbot initialization failed: {e}.")
-
+        except Exception as e:
+            st.error(f"Chatbot initialization failed: {e}.")
 # 7. Price Trends & Calculator
 elif selected_page == "Price Trends":
     ts.title("📈 Cattle Price Trends & Valuation Estimator")
