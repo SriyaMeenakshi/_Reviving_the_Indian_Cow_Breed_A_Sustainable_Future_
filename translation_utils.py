@@ -21,14 +21,16 @@ LANGUAGES = {
 }
 
 
-def safe_translate(text: str, dest_lang: str) -> str:
+def safe_translate(text: str, dest_lang: str) -> str: 
     try:
         translated = GoogleTranslator(source='auto', target=dest_lang).translate(text)
-        # Restore line breaks that may have been lost
-        translated = translated.replace("\\n", "\n")
-        return translated
-    except Exception as e:
-        return f"Translation error: {e}"
+        if not translated:
+            return text  # fallback to original if empty or None
+        return translated.replace("\\n", "\n")
+    except Exception:
+        return text  # fallback on error
+
+
 
 
 @st.cache_data(ttl=3600)
